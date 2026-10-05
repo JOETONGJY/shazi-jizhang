@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
+import Constants from 'expo-constants';
 import { useApp } from '../state/AppStore';
 import { countTx, countDistinctDays, getMeta, setMeta } from '../db/repo';
 import { THEME_COLORS } from '../theme/themes';
@@ -133,7 +134,8 @@ export function MineScreen({ onOpen, onCheckUpdate }: { onOpen: (page: 'catManag
 
 function AlertAbout(dbPath: string) {
   import('react-native').then(({ Alert }) => {
-    Alert.alert('关于 · 啥子记账 V1.0', `本地记账App，无服务器、无账号。\n\n数据文件位置：\n${dbPath}\n\n备份与导出建议定期进行。`);
+    const v = Constants.expoConfig?.version ?? '1.0';
+    Alert.alert(`关于 · 啥子记账 V${v}`, `本地记账App，无服务器、无账号。\n\n数据文件位置：\n${dbPath}\n\n备份与导出建议定期进行。`);
   });
 }
 
