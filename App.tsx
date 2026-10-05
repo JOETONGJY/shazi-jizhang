@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Animated, LogBox, StatusBar, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import Constants from 'expo-constants';
 import { AppProvider, useApp } from './src/state/AppStore';
 import { TabBar, type TabKey } from './src/components/TabBar';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -13,6 +14,8 @@ import { BudgetScreen } from './src/screens/BudgetScreen';
 import { autoBackup } from './src/db/files';
 import { generateDueRecurrences } from './src/db/repo';
 import { todayStr } from './src/logic/dates';
+import { checkForUpdate, type UpdateInfo } from './src/logic/updater';
+import { UpdateModal } from './src/components/UpdateModal';
 
 type Overlay =
   | null
@@ -59,6 +62,24 @@ function Shell() {
   const [splashGone, setSplashGone] = useState(false);
   const splashOpacity = useRef(new Animated.Value(1)).current;
   const sysDark = useColorScheme() === 'dark';
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const updateChecking = useRef(false);
+
+  const doCheckUpdate = React.useCallback(async (): Promise<'latest' | 'available'> => {
+    if (updateChecking.current) return 'latest';
+    updateChecking.current = true;
+    const info = await checkForUpdate();
+    updateChecking.current = false;
+    if (info) { setUpdateInfo(info); return 'available'; }
+    return 'latest';
+  }, []);
+
+  // 数据就绪后2.5秒静默检查更新（发现新版本弹窗）
+  useEffect(() => {
+    if (!ready) return;
+    const t = setTimeout(() => { void doCheckUpdate(); }, 2500);
+    return () => clearTimeout(t);
+  }, [ready, doCheckUpdate]);
 
   // 退到后台时静默自动备份（滚动保留最近3份）
   useEffect(() => {
@@ -92,7 +113,7 @@ function Shell() {
       <View style={{ flex: 1 }}>
         {tab === 'home' && <HomeScreen onEdit={(id) => setOverlay({ kind: 'edit', id })} onAdd={() => setOverlay({ kind: 'record' })} />}
         {tab === 'stats' && <StatsScreen />}
-        {tab === 'mine' && <MineScreen onOpen={(p) => setOverlay({ kind: p })} />}
+        {tab === 'mine' && <MineScreen onOpen={(p) => setOverlay({ kind: p })} onCheckUpdate={doCheckUpdate} />}
       </View>
       {overlay === null && (
         <TabBar active={tab} onTab={setTab} />
@@ -107,6 +128,11 @@ function Shell() {
           {overlay.kind === 'budget' && <BudgetScreen onClose={() => setOverlay(null)} />}
           {overlay.kind === 'recurrence' && <RecurrenceScreen onClose={() => setOverlay(null)} />}
         </View>
+      )}
+
+      {/* 应用内更新弹窗 */}
+      {updateInfo && (
+        <UpdateModal info={updateInfo} localVersion={Constants.expoConfig?.version ?? ''} onClose={() => setUpdateInfo(null)} />
       )}
 
       {/* 开屏层：盖住一切直到动画结束 */}

@@ -10,7 +10,7 @@ import { setDailyReminder } from '../logic/reminder';
 import { dbFile } from '../db/database';
 import type { ThemeName } from '../types';
 
-export function MineScreen({ onOpen }: { onOpen: (page: 'catManage' | 'accountManage' | 'budget' | 'recurrence') => void }) {
+export function MineScreen({ onOpen, onCheckUpdate }: { onOpen: (page: 'catManage' | 'accountManage' | 'budget' | 'recurrence') => void; onCheckUpdate: () => Promise<'latest' | 'available'> }) {
   const { palette, revision, themeName, dark, setThemeName, setDark, bump } = useApp();
   const [msg, setMsg] = useState('');
   const txCount = useMemo(() => countTx(), [revision]);
@@ -112,7 +112,11 @@ export function MineScreen({ onOpen }: { onOpen: (page: 'catManage' | 'accountMa
             </TouchableOpacity>
           </Row>
           <Row icon="🔒" iconBg="#F1F5F9" label="应用锁" palette={palette} p1 />
-          <Row icon="ℹ️" iconBg="#F1F5F9" label="关于" palette={palette} last onPress={showAbout} />
+          <Row icon="⬆️" iconBg="#E8F5E9" label="检查更新" palette={palette} last onPress={async () => {
+            setMsg('正在检查更新…');
+            const r = await onCheckUpdate();
+            setMsg(r === 'available' ? '发现新版本，请在弹窗中更新' : '当前已是最新版本');
+          }} />
         </Group>
 
         <View style={st.trust}>
