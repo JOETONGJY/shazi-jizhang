@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, Animated, LogBox, StatusBar, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { AppState, Animated, BackHandler, LogBox, StatusBar, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import Constants from 'expo-constants';
 import { AppProvider, useApp } from './src/state/AppStore';
 import { TabBar, type TabKey } from './src/components/TabBar';
@@ -97,6 +97,16 @@ function Shell() {
     }, 1100);
     return () => clearTimeout(t);
   }, [ready, splashOpacity]);
+
+  // 安卓返回键：分层退回——二级页关闭 / 其他Tab回明细 / 明细再按才退出
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (overlay !== null) { setOverlay(null); return true; }
+      if (tab !== 'home') { setTab('home'); return true; }
+      return false; // 主页默认退出
+    });
+    return () => sub.remove();
+  }, [overlay, tab]);
 
   if (!ready) {
     return (

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { BackHandler, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../state/AppStore';
 import { listTxByMonth, categoryFilterIds, topCategories, listAccounts, listTxAll, countTx, getTotalBudget, monthSums } from '../db/repo';
@@ -66,6 +66,14 @@ export function HomeScreen({ onEdit, onAdd }: { onEdit: (id: number) => void; on
   const prevSums = monthSums(addMonths(month, -1));
   const changePct = prevSums.expense > 0 ? Math.round(((sums.expense - prevSums.expense) / prevSums.expense) * 100) : null;
   const changePctText = changePct !== null ? `${changePct >= 0 ? '+' : ''}${changePct}%` : '—';
+
+  React.useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (filterSheet !== null) { setFilterSheet(null); return true; }
+      return false;
+    });
+    return () => sub.remove();
+  }, [filterSheet]);
 
   const changeMonth = (d: number) => {
     const next = addMonths(month, d);
