@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "jizhang",
+    "name": "啥子记账",
     "slug": "jizhang",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,10 +16,15 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.jizhang"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-sqlite",
+      "expo-sharing"
+    ]
   }
 }

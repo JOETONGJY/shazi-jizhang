@@ -9,7 +9,11 @@ dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native build outputs（android/ 工程本身纳入仓库，包含图标与开屏定制）
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
 .kotlin/
 *.orig.*
 *.jks
@@ -18,16 +22,13 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
+# dev server / logs
 yarn-error.*
+*.log
 
-# macOS
+# macOS / Windows
 .DS_Store
+Thumbs.db
 *.pem
 
 # local env files
@@ -36,6 +37,5 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# sqlite dev copies
+*.db
