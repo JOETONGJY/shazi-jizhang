@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as DocumentPicker from 'expo-document-picker';
 import Constants from 'expo-constants';
 import { useApp } from '../state/AppStore';
 import { countTx, countDistinctDays, getMeta, setMeta } from '../db/repo';
 import { THEME_COLORS } from '../theme/themes';
-import { backupCount, exportCsv, restoreFrom, shareBackup } from '../db/files';
+import { backupCount, exportCsv, restoreFrom, shareBackup, getBackupDirUri, setBackupDirUri } from '../db/files';
+import * as LegacyFS from 'expo-file-system/legacy';
 import { setDailyReminder } from '../logic/reminder';
 import { dbFile } from '../db/database';
 import type { ThemeName } from '../types';
@@ -18,6 +19,37 @@ export function MineScreen({ onOpen, onCheckUpdate }: { onOpen: (page: 'catManag
   const days = useMemo(() => countDistinctDays(), [revision]);
   const backups = useMemo(() => backupCount(), [revision]);
   const reminderOn = useMemo(() => getMeta('reminder', '0') === '1', [revision]);
+  const backupDirSet = useMemo(() => getBackupDirUri() !== null, [revision]);
+
+  async function requestBackupDir() {
+    try {
+      const res = await LegacyFS.StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (res.granted) {
+        await setBackupDirUri(res.directoryUri);
+        bump();
+        setMsg('已设置自动备份文件夹：退到后台和更新前会自动备份到那里（卸载后文件夹仍在）');
+      }
+    } catch (e) {
+      setMsg(`设置失败：${String(e).slice(0, 50)}`);
+    }
+  }
+
+  function pickBackupDir() {
+    const cur = getBackupDirUri();
+    if (!cur) {
+      void requestBackupDir();
+      return;
+    }
+    Alert.alert(
+      '自动备份文件夹',
+      '已设置。退到后台和安装更新前会自动把数据备份到该文件夹；卸载后文件夹不会被删除，重装后重新设置一次即可恢复。',
+      [
+        { text: '取消', style: 'cancel' },
+        { text: '清除设置', style: 'destructive', onPress: () => { void setBackupDirUri(null).then(() => { bump(); setMsg('已清除自动备份文件夹'); }); } },
+        { text: '更换文件夹', onPress: () => { void requestBackupDir(); } },
+      ],
+    );
+  }
 
   async function toggleReminder(v: boolean) {
     const r = await setDailyReminder(v, 21, 0);
@@ -98,6 +130,7 @@ export function MineScreen({ onOpen, onCheckUpdate }: { onOpen: (page: 'catManag
 
         <Group title="数据" palette={palette}>
           <Row icon="📤" iconBg="#E0F2F1" label="导出 CSV / Excel" palette={palette} onPress={async () => { const r = await exportCsv(); setMsg(r.msg); }} />
+          <Row icon="📂" iconBg="#FFF8E1" label={backupDirSet ? '自动备份文件夹（已设置）' : '自动备份文件夹（未设置）'} palette={palette} onPress={pickBackupDir} />
           <Row icon="💾" iconBg="#E8F5E9" label="备份与恢复" palette={palette} last onPress={() => {
             backupAlert({
               onBackup: async () => { const r = await shareBackup(); setMsg(r.msg); },
@@ -125,7 +158,7 @@ export function MineScreen({ onOpen, onCheckUpdate }: { onOpen: (page: 'catManag
           <Text style={[st.trustChip, { backgroundColor: palette.primarySoft, color: palette.primary }]}>🚫 无广告</Text>
           <Text style={[st.trustChip, { backgroundColor: palette.primarySoft, color: palette.primary }]}>♻️ 数据可导出</Text>
         </View>
-        {msg !== '' && <Text style={{ textAlign: 'center', fontSize: 11.5, color: palette.primary, marginTop: 8, paddingHorizontal: 20 }}>{msg}</Text>}
+        {msg !== '' ? <Text style={{ textAlign: 'center', fontSize: 11.5, color: palette.primary, marginTop: 8, paddingHorizontal: 20 }}>{msg}</Text> : null}
         <View style={{ height: 24 }} />
       </ScrollView>
     </View>
@@ -133,20 +166,16 @@ export function MineScreen({ onOpen, onCheckUpdate }: { onOpen: (page: 'catManag
 }
 
 function AlertAbout(dbPath: string) {
-  import('react-native').then(({ Alert }) => {
-    const v = Constants.expoConfig?.version ?? '1.0';
-    Alert.alert(`关于 · 啥子记账 V${v}`, `本地记账App，无服务器、无账号。\n\n数据文件位置：\n${dbPath}\n\n备份与导出建议定期进行。`);
-  });
+  const v = Constants.expoConfig?.version ?? '1.0';
+  Alert.alert(`关于 · 啥子记账 V${v}`, `本地记账App，无服务器、无账号。\n\n数据文件位置：\n${dbPath}\n\n备份与导出建议定期进行。`);
 }
 
 function backupAlert({ onBackup, onRestore }: { onBackup: () => void; onRestore: () => void }) {
-  import('react-native').then(({ Alert }) => {
-    Alert.alert('备份与恢复', '备份会把数据库文件复制一份并可分享保存；恢复会用备份文件覆盖当前数据。', [
-      { text: '取消', style: 'cancel' },
-      { text: '从备份恢复', onPress: onRestore },
-      { text: '备份到文件', onPress: onBackup },
-    ]);
-  });
+  Alert.alert('备份与恢复', '备份会把数据库文件复制一份并可分享保存；恢复会用备份文件覆盖当前数据。', [
+    { text: '取消', style: 'cancel' },
+    { text: '从备份恢复', onPress: onRestore },
+    { text: '备份到文件', onPress: onBackup },
+  ]);
 }
 
 function Num({ v, k }: { v: string; k: string }) {

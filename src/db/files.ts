@@ -1,8 +1,57 @@
 import * as Sharing from 'expo-sharing';
 import { Directory, File, Paths } from 'expo-file-system';
+import * as LegacyFS from 'expo-file-system/legacy';
 import { dbFile, getDb, initDb, setDb } from './database';
 import { backupFileName, txToCsv } from '../logic/csv';
-import { listTxAll } from './repo';
+import { getMeta, setMeta, listTxAll } from './repo';
+
+const SAF = LegacyFS.StorageAccessFramework;
+const BACKUP_DIR_META_KEY = 'backup_dir_uri';
+const SAF_KEEP = 3;
+
+/** 用户授权的持久备份文件夹（SAF，卸载后文件夹仍在）；未设置返回 null */
+export function getBackupDirUri(): string | null {
+  const v = getMeta(BACKUP_DIR_META_KEY, '');
+  return v !== '' ? v : null;
+}
+
+export async function setBackupDirUri(uri: string | null): Promise<void> {
+  setMeta(BACKUP_DIR_META_KEY, uri ?? '');
+}
+
+/** 把当前数据库写入 SAF 文件夹（base64 中转），滚动保留最近 SAF_KEEP 份 */
+async function backupToDir(dirUri: string): Promise<string> {
+  const base64 = await LegacyFS.readAsStringAsync(dbFile().uri, { encoding: LegacyFS.EncodingType.Base64 });
+  const name = backupFileName(new Date());
+  const fileUri = await SAF.createFileAsync(dirUri, name, 'application/octet-stream');
+  await LegacyFS.writeAsStringAsync(fileUri, base64, { encoding: LegacyFS.EncodingType.Base64 });
+  // 滚动清理：名字含 jizhang- 且字典序即时间序
+  try {
+    const uris = await SAF.readDirectoryAsync(dirUri);
+    const ours = uris
+      .filter((u) => decodeURIComponent(u).includes('/jizhang-'))
+      .sort()
+      .reverse();
+    for (const old of ours.slice(SAF_KEEP)) {
+      await SAF.deleteAsync(old).catch(() => {});
+    }
+  } catch {
+    // 清理失败不影响本次备份
+  }
+  return fileUri;
+}
+
+/** 确保安装更新前有一份外部可达的备份：SAF 文件夹优先，否则弹分享面板 */
+export async function ensureBackupBeforeInstall(): Promise<{ msg: string }> {
+  const dir = getBackupDirUri();
+  if (dir) {
+    await backupToDir(dir);
+    return { msg: '已把数据备份到自动备份文件夹' };
+  }
+  const f = await createBackup(3);
+  const ok = await share(f);
+  return { msg: ok ? '已生成备份，请在分享面板选择保存位置（如「保存到文件」）' : `备份已生成：${f.name}` };
+}
 
 export function backupDir(): Directory {
   return new Directory(Paths.document, 'jizhang-backups');
@@ -34,11 +83,23 @@ export async function createBackup(keep = 3): Promise<File> {
   return target;
 }
 
-/** 退出App时调用：静默自动备份，失败不影响使用 */
+/** 退到后台时调用：静默自动备份，失败不影响使用 */
 export function autoBackup(): void {
-  void createBackup(3).catch(() => {
-    // 备份失败不打扰用户
-  });
+  void (async () => {
+    try {
+      await createBackup(3); // 私有目录滚动备份（防数据库损坏）
+    } catch {
+      // 备份失败不打扰用户
+    }
+    const dir = getBackupDirUri();
+    if (dir) {
+      try {
+        await backupToDir(dir); // 用户文件夹备份（卸载也不丢）
+      } catch {
+        // 同上
+      }
+    }
+  })();
 }
 
 async function share(file: File): Promise<boolean> {
