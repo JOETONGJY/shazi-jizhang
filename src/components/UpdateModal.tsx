@@ -31,6 +31,16 @@ export function UpdateModal({ info, localVersion, onClose }: { info: UpdateInfo;
     (async () => {
       const candidates = apkDownloadCandidates(info.apkUrl);
       for (let i = 0; i < candidates.length; i++) {
+        let resumable: LegacyFS.DownloadResumable | null = null;
+        let latestProgress = 0;
+        // 直连探速：20 秒内进度不足 5% 视为不可用（太慢也换镜像，避免用户干等一小时）
+        const probeTimer = i === 0
+          ? setTimeout(() => {
+              if (!cancelled && latestProgress < 0.05) {
+                void resumable?.cancelAsync().catch(() => {});
+              }
+            }, 20_000)
+          : null;
         try {
           if (cancelled) return;
           setSource(i === 0 ? '直连' : `镜像${i}`);
@@ -38,17 +48,19 @@ export function UpdateModal({ info, localVersion, onClose }: { info: UpdateInfo;
           const dest = (LegacyFS.cacheDirectory ?? '') + `shazi-jizhang-update-${i}.apk`;
           // 换源重试前清掉上一源的半截文件
           await LegacyFS.deleteAsync(dest, { idempotent: true }).catch(() => {});
-          const resumable = LegacyFS.createDownloadResumable(
+          resumable = LegacyFS.createDownloadResumable(
             candidates[i],
             dest,
             {},
             (p) => {
               if (!cancelled && p.totalBytesExpectedToWrite > 0) {
-                setProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
+                latestProgress = p.totalBytesWritten / p.totalBytesExpectedToWrite;
+                setProgress(latestProgress);
               }
             },
           );
           const result = await resumable.downloadAsync();
+          if (probeTimer) clearTimeout(probeTimer);
           if (cancelled) return;
           if (result?.uri) {
             setApkUri(result.uri);
@@ -56,7 +68,8 @@ export function UpdateModal({ info, localVersion, onClose }: { info: UpdateInfo;
             return;
           }
         } catch {
-          // 当前源失败，静默换下一个
+          if (probeTimer) clearTimeout(probeTimer);
+          // 当前源失败或探速不达标，静默换下一个
         }
       }
       if (!cancelled) {
