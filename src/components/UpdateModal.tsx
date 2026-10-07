@@ -2,50 +2,66 @@ import React, { useEffect, useState } from 'react';
 import { Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as LegacyFS from 'expo-file-system/legacy';
+import Constants from 'expo-constants';
 import { useApp } from '../state/AppStore';
-import type { UpdateInfo } from '../logic/updater';
+import { apkDownloadCandidates, type UpdateInfo } from '../logic/updater';
+import { ensureBackupBeforeInstall } from '../db/files';
 import { fmtMoney } from '../logic/stats';
 
 type Phase = 'idle' | 'downloading' | 'ready';
 
-/** 应用内更新弹窗：发现新版本 → 下载APK（带进度）→ 拉起系统安装器 */
+const ANDROID_MANAGE_UNKNOWN_APPS = 'android.settings.MANAGE_UNKNOWN_APPS_SOURCES';
+const PACKAGE_NAME = Constants.expoConfig?.android?.package ?? '';
+
+/** 应用内更新弹窗：发现新版本 → 下载APK（直连失败自动切镜像，带进度）→ 拉起系统安装器 */
 export function UpdateModal({ info, localVersion, onClose }: { info: UpdateInfo; localVersion: string; onClose: () => void }) {
   const { palette } = useApp();
   const [phase, setPhase] = useState<Phase>('idle');
   const [progress, setProgress] = useState(0);
+  const [source, setSource] = useState('直连');
   const [err, setErr] = useState('');
+  const [needPerm, setNeedPerm] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [backupMsg, setBackupMsg] = useState('');
   const [apkUri, setApkUri] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     if (phase !== 'downloading') return;
     (async () => {
-      try {
-        const dest = (LegacyFS.cacheDirectory ?? '') + 'shazi-jizhang-update.apk';
-        const resumable = LegacyFS.createDownloadResumable(
-          info.apkUrl,
-          dest,
-          {},
-          (p) => {
-            if (!cancelled && p.totalBytesExpectedToWrite > 0) {
-              setProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
-            }
-          },
-        );
-        const result = await resumable.downloadAsync();
-        if (cancelled) return;
-        if (result?.uri) {
-          setApkUri(result.uri);
-          setPhase('ready');
-        } else {
-          setErr('下载失败，请检查网络后重试');
-          setPhase('idle');
+      const candidates = apkDownloadCandidates(info.apkUrl);
+      for (let i = 0; i < candidates.length; i++) {
+        try {
+          if (cancelled) return;
+          setSource(i === 0 ? '直连' : `镜像${i}`);
+          setProgress(0);
+          const dest = (LegacyFS.cacheDirectory ?? '') + `shazi-jizhang-update-${i}.apk`;
+          // 换源重试前清掉上一源的半截文件
+          await LegacyFS.deleteAsync(dest, { idempotent: true }).catch(() => {});
+          const resumable = LegacyFS.createDownloadResumable(
+            candidates[i],
+            dest,
+            {},
+            (p) => {
+              if (!cancelled && p.totalBytesExpectedToWrite > 0) {
+                setProgress(p.totalBytesWritten / p.totalBytesExpectedToWrite);
+              }
+            },
+          );
+          const result = await resumable.downloadAsync();
+          if (cancelled) return;
+          if (result?.uri) {
+            setApkUri(result.uri);
+            setPhase('ready');
+            return;
+          }
+        } catch {
+          // 当前源失败，静默换下一个
         }
-      } catch (e) {
-        if (!cancelled) {
-          setErr(`下载失败：${String(e).slice(0, 60)}`);
-          setPhase('idle');
-        }
+      }
+      if (!cancelled) {
+        setErr('下载失败：直连和镜像都不可用，请稍后再试');
+        setPhase('idle');
       }
     })();
     return () => { cancelled = true; };
@@ -61,8 +77,27 @@ export function UpdateModal({ info, localVersion, onClose }: { info: UpdateInfo;
       });
       onClose();
     } catch (e) {
-      setErr('无法启动安装，请允许"安装未知应用"权限后重试');
+      setNeedPerm(true);
+      setErr('需要「安装未知应用」权限');
     }
+  }
+
+  function openPermSettings() {
+    IntentLauncher.startActivityAsync(ANDROID_MANAGE_UNKNOWN_APPS, {
+      data: `package:${PACKAGE_NAME}`,
+    }).catch(() => {});
+  }
+
+  async function backupThenInstall() {
+    setPreparing(true);
+    try {
+      const r = await ensureBackupBeforeInstall();
+      setBackupMsg(r.msg);
+    } catch {
+      setBackupMsg('自动备份未完成，继续安装（可在「我的」手动备份）');
+    }
+    setPreparing(false);
+    await openInstaller();
   }
 
   const sizeMb = (info.size / 1024 / 1024).toFixed(1);
@@ -94,20 +129,35 @@ export function UpdateModal({ info, localVersion, onClose }: { info: UpdateInfo;
                 }} />
               </View>
               <Text style={{ fontSize: 11, color: palette.faint, textAlign: 'center', marginTop: 6 }}>
-                下载中 {Math.round(progress * 100)}%
+                {source}下载中 {Math.round(progress * 100)}%
               </Text>
             </View>
-          ) : err !== '' ? (
-            <Text style={{ fontSize: 11.5, color: palette.danger, marginTop: 12, textAlign: 'center' }}>{err}</Text>
           ) : phase === 'ready' ? (
-            <TouchableOpacity style={[st.btn, { backgroundColor: palette.primary, marginTop: 14 }]} onPress={openInstaller}>
-              <Text style={{ color: palette.onAccent, fontWeight: '800', fontSize: 15 }}>安装更新</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[st.btn, { backgroundColor: palette.primary, marginTop: 14, opacity: preparing ? 0.6 : 1 }]}
+                disabled={preparing}
+                onPress={() => { void backupThenInstall(); }}
+              >
+                <Text style={{ color: palette.onAccent, fontWeight: '800', fontSize: 15 }}>{preparing ? '正在备份…' : '安装更新'}</Text>
+              </TouchableOpacity>
+              {needPerm && (
+                <TouchableOpacity style={[st.btn, { borderColor: palette.primary, borderWidth: 1, marginTop: 10 }]} onPress={openPermSettings}>
+                  <Text style={{ color: palette.primary, fontWeight: '800', fontSize: 14 }}>去开启安装权限</Text>
+                </TouchableOpacity>
+              )}
+            </>
           ) : (
             <TouchableOpacity style={[st.btn, { backgroundColor: palette.primary, marginTop: 14 }]} onPress={() => setPhase('downloading')}>
               <Text style={{ color: palette.onAccent, fontWeight: '800', fontSize: 15 }}>立即更新</Text>
             </TouchableOpacity>
           )}
+          {err !== '' && phase !== 'downloading' ? (
+            <Text style={{ fontSize: 11.5, color: palette.danger, marginTop: 10, textAlign: 'center' }}>{err}</Text>
+          ) : null}
+          {backupMsg !== '' && phase === 'ready' ? (
+            <Text style={{ fontSize: 11, color: palette.faint, marginTop: 8, textAlign: 'center' }}>{backupMsg}</Text>
+          ) : null}
 
           {phase !== 'downloading' && (
             <TouchableOpacity onPress={onClose} style={{ alignItems: 'center', padding: 10 }}>

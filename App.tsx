@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, Animated, BackHandler, LogBox, StatusBar, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { AppState, Animated, Alert, BackHandler, LogBox, StatusBar, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import Constants from 'expo-constants';
 import { AppProvider, useApp } from './src/state/AppStore';
 import { TabBar, type TabKey } from './src/components/TabBar';
@@ -12,7 +12,7 @@ import { AccountManage } from './src/screens/AccountManage';
 import { RecurrenceScreen } from './src/screens/RecurrenceScreen';
 import { BudgetScreen } from './src/screens/BudgetScreen';
 import { autoBackup } from './src/db/files';
-import { generateDueRecurrences } from './src/db/repo';
+import { generateDueRecurrences, getMeta, setMeta, countTx } from './src/db/repo';
 import { todayStr } from './src/logic/dates';
 import { checkForUpdate, type UpdateInfo } from './src/logic/updater';
 import { UpdateModal } from './src/components/UpdateModal';
@@ -65,11 +65,23 @@ function Shell() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const updateChecking = useRef(false);
 
-  const doCheckUpdate = React.useCallback(async (): Promise<'latest' | 'available'> => {
+  const doCheckUpdate = React.useCallback(async (force = false): Promise<'latest' | 'available'> => {
     if (updateChecking.current) return 'latest';
+    // 自动检查节流：6小时内只查一次（手动检查不受限）
+    if (!force) {
+      const last = Number(getMeta('last_update_check', '0')) || 0;
+      if (Date.now() - last < 6 * 60 * 60 * 1000) return 'latest';
+    }
     updateChecking.current = true;
-    const info = await checkForUpdate();
-    updateChecking.current = false;
+    let info: UpdateInfo | null = null;
+    try {
+      info = await checkForUpdate();
+      setMeta('last_update_check', String(Date.now())); // 只在成功拿到响应后计节流，失败下次启动重查
+    } catch {
+      // 网络失败：自动检查静默，不记节流时间
+    } finally {
+      updateChecking.current = false;
+    }
     if (info) { setUpdateInfo(info); return 'available'; }
     return 'latest';
   }, []);
@@ -80,6 +92,29 @@ function Shell() {
     const t = setTimeout(() => { void doCheckUpdate(); }, 2500);
     return () => clearTimeout(t);
   }, [ready, doCheckUpdate]);
+
+  // 全新安装（无任何账单）一次性提示：可以从备份文件恢复数据
+  useEffect(() => {
+    if (!ready) return;
+    const t = setTimeout(() => {
+      try {
+        if (countTx() === 0 && getMeta('restore_hint', '0') !== '1') {
+          setMeta('restore_hint', '1');
+          Alert.alert(
+            '是重装或换机了吗？',
+            '以前的账单可以从备份文件恢复：「我的」→「备份与恢复」→「从备份恢复」。\n也可以设置「自动备份文件夹」，以后卸载重装都不怕。',
+            [
+              { text: '我知道了' },
+              { text: '去「我的」看看', onPress: () => setTab('mine') },
+            ],
+          );
+        }
+      } catch {
+        // 提示失败不影响使用
+      }
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [ready]);
 
   // 退到后台时静默自动备份（滚动保留最近3份）
   useEffect(() => {
@@ -123,7 +158,7 @@ function Shell() {
       <View style={{ flex: 1 }}>
         {tab === 'home' && <HomeScreen onEdit={(id) => setOverlay({ kind: 'edit', id })} onAdd={() => setOverlay({ kind: 'record' })} />}
         {tab === 'stats' && <StatsScreen />}
-        {tab === 'mine' && <MineScreen onOpen={(p) => setOverlay({ kind: p })} onCheckUpdate={doCheckUpdate} />}
+        {tab === 'mine' && <MineScreen onOpen={(p) => setOverlay({ kind: p })} onCheckUpdate={() => doCheckUpdate(true)} />}
       </View>
       {overlay === null && (
         <TabBar active={tab} onTab={setTab} />
