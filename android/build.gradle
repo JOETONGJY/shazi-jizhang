@@ -2,6 +2,9 @@
 
 buildscript {
   repositories {
+    // 国内镜像加速（可删：删除后恢复 google()/mavenCentral() 直连）
+    maven { url 'https://maven.aliyun.com/repository/google' }
+    maven { url 'https://maven.aliyun.com/repository/public' }
     google()
     mavenCentral()
   }
@@ -14,9 +17,13 @@ buildscript {
 
 allprojects {
   repositories {
+    // 国内镜像加速（可删）
+    maven { url 'https://maven.aliyun.com/repository/google' }
+    maven { url 'https://maven.aliyun.com/repository/public' }
     google()
-    mavenCentral()
+    // jitpack 提前：repo.maven.apache.org 在当前网络易超时，jitpack.io 可直连（expo-blur 的 BlurView 在 jitpack）
     maven { url 'https://www.jitpack.io' }
+    mavenCentral()
   }
 }
 
