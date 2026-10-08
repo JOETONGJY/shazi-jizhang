@@ -92,7 +92,7 @@ android {
         applicationId 'com.anonymous.jizhang'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 4
+        versionCode 5
         // versionName 自动取自 app.json 的 expo.version，升版本只需改 app.json
         versionName new groovy.json.JsonSlurper().parseText(file('../../app.json').text).expo.version
 
