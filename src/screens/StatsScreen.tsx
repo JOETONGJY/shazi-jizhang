@@ -10,13 +10,14 @@ import type { TxType } from '../types';
 
 const SLICE_COLORS = ['#FFD60A', '#FF375F', '#0A84FF', '#BF5AF2', '#30D158', '#48484E'];
 
-/** 整数金额省略小数（¥2,000），有小数才显示两位（¥25.30）——统计页大数字更紧凑，配合自适应缩号保证永不换行 */
-function fmtMoneyShort(n: number): string {
-  return Number.isInteger(n) ? n.toLocaleString('zh-CN') : fmtMoney(n);
+/** 金额拆成整数与小数两部分：整数大字一行，小数（含小数点）以小字下标缀于右下角 */
+function splitMoney(n: number): { int: string; dec: string } {
+  const [int, dec = '00'] = fmtMoney(n).split('.');
+  return { int, dec };
 }
 
-/** 汇总卡大金额通用属性：单行 + 超宽自动缩号（用户系统字体放大/窄屏时也不换行） */
-const bigMoneyProps = { numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.6 } as const;
+/** 整数部分属性：单行 + 超 6 位数时轻微缩号兜底 */
+const bigIntProps = { numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75 } as const;
 
 export function StatsScreen() {
   const { palette, revision } = useApp();
@@ -55,6 +56,10 @@ export function StatsScreen() {
   const prev = monthSums(addMonths(month, -1));
   const changePct = prev.expense > 0 ? Math.round(((sums.expense - prev.expense) / prev.expense) * 100) : null;
   const saveRate = sums.income > 0 ? Math.round((balance / sums.income) * 100) : null;
+  const mExpense = splitMoney(sums.expense);
+  const mIncome = splitMoney(sums.income);
+  const mBalance = splitMoney(Math.abs(balance));
+  const mDaily = splitMoney(dailyAvg);
   const maxTotal = all[0]?.total ?? 1;
 
   const top5 = all.slice(0, 5);
@@ -89,22 +94,34 @@ export function StatsScreen() {
           <View style={st.sumGrid}>
             <View style={[st.sg, st.sgTL]}>
               <Text style={{ fontSize: 12, color: palette.sub, fontWeight: '600' }}>支出</Text>
-              <Text style={{ fontSize: 26, fontWeight: '800', color: palette.danger, marginTop: 3, fontVariant: ['tabular-nums'] }} {...bigMoneyProps}>¥{fmtMoneyShort(sums.expense)}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 3 }}>
+                <Text style={{ fontSize: 26, fontWeight: '800', color: palette.danger, fontVariant: ['tabular-nums'] }} {...bigIntProps}>¥{mExpense.int}</Text>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: palette.danger, paddingBottom: 4, fontVariant: ['tabular-nums'] }}>.{mExpense.dec}</Text>
+              </View>
               <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>{changePct !== null ? `环比上月 ${changePct >= 0 ? '+' : ''}${changePct}%` : ' '}</Text>
             </View>
             <View style={[st.sg, st.sgTR]}>
               <Text style={{ fontSize: 12, color: palette.sub, fontWeight: '600' }}>收入</Text>
-              <Text style={{ fontSize: 26, fontWeight: '800', color: palette.income, marginTop: 3, fontVariant: ['tabular-nums'] }} {...bigMoneyProps}>¥{fmtMoneyShort(sums.income)}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 3 }}>
+                <Text style={{ fontSize: 26, fontWeight: '800', color: palette.income, fontVariant: ['tabular-nums'] }} {...bigIntProps}>¥{mIncome.int}</Text>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: palette.income, paddingBottom: 4, fontVariant: ['tabular-nums'] }}>.{mIncome.dec}</Text>
+              </View>
               <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>本月到账</Text>
             </View>
             <View style={[st.sg, st.sgBL]}>
               <Text style={{ fontSize: 12, color: palette.sub, fontWeight: '600' }}>结余</Text>
-              <Text style={{ fontSize: 26, fontWeight: '800', color: balance >= 0 ? palette.income : palette.danger, marginTop: 3, fontVariant: ['tabular-nums'] }} {...bigMoneyProps}>{balance >= 0 ? '+' : '-'}¥{fmtMoneyShort(Math.abs(balance))}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 3 }}>
+                <Text style={{ fontSize: 26, fontWeight: '800', color: balance >= 0 ? palette.income : palette.danger, fontVariant: ['tabular-nums'] }} {...bigIntProps}>{balance >= 0 ? '+' : '-'}¥{mBalance.int}</Text>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: balance >= 0 ? palette.income : palette.danger, paddingBottom: 4, fontVariant: ['tabular-nums'] }}>.{mBalance.dec}</Text>
+              </View>
               <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>{sums.income > 0 ? `储蓄率 ${Math.max(saveRate ?? 0, 0)}%` : ' '}</Text>
             </View>
             <View style={[st.sg, st.sgBR]}>
               <Text style={{ fontSize: 12, color: palette.sub, fontWeight: '600' }}>日均支出</Text>
-              <Text style={{ fontSize: 26, fontWeight: '800', color: palette.text, marginTop: 3, fontVariant: ['tabular-nums'] }} {...bigMoneyProps}>¥{fmtMoneyShort(dailyAvg)}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 3 }}>
+                <Text style={{ fontSize: 26, fontWeight: '800', color: palette.text, fontVariant: ['tabular-nums'] }} {...bigIntProps}>¥{mDaily.int}</Text>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: palette.text, paddingBottom: 4, fontVariant: ['tabular-nums'] }}>.{mDaily.dec}</Text>
+              </View>
               <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>按已过{elapsed}天</Text>
             </View>
           </View>
