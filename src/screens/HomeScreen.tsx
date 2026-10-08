@@ -16,6 +16,8 @@ export function HomeScreen({ onEdit, onAdd }: { onEdit: (id: number) => void; on
   const [filterCatId, setFilterCatId] = useState<number | null>(null);
   const [filterAccId, setFilterAccId] = useState<number | null>(null);
   const [filterSheet, setFilterSheet] = useState<null | 'cat' | 'acc' | 'mon'>(null);
+  // 圆环说明弹层：轻点圆环触发
+  const [ringHelp, setRingHelp] = useState(false);
 
   const txs = useMemo(
     () => listTxByMonth(
@@ -102,10 +104,12 @@ export function HomeScreen({ onEdit, onAdd }: { onEdit: (id: number) => void; on
 
         {/* 圆环徽章卡 */}
         <View style={[st.ringsCard, { backgroundColor: palette.card }]}>
-          <ActivityRings
-            size={76}
-            rings={rings.map((r) => ({ ...r, bg: withAlpha(r.color, 0.22) }))}
-          />
+          <TouchableOpacity activeOpacity={0.75} onPress={() => setRingHelp(true)}>
+            <ActivityRings
+              size={76}
+              rings={rings.map((r) => ({ ...r, bg: withAlpha(r.color, 0.22) }))}
+            />
+          </TouchableOpacity>
           <Text style={[st.ringTxt, { color: palette.sub }]}>
             {totalBudget > 0 ? (
               <>
@@ -254,6 +258,55 @@ export function HomeScreen({ onEdit, onAdd }: { onEdit: (id: number) => void; on
         </TouchableOpacity>
       )}
 
+      {/* 圆环说明弹层（轻点圆环触发） */}
+      {ringHelp && (
+        <TouchableOpacity style={st.backdrop} activeOpacity={1} onPress={() => setRingHelp(false)}>
+          <View style={[st.sheet, { backgroundColor: palette.card }]}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: palette.text, marginBottom: 14 }}>圆环说明</Text>
+            <View style={st.ringLegendRow}>
+              <View style={[st.ringLegendDot, { backgroundColor: '#FF375F' }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: palette.text }}>外环 · 花钱进度</Text>
+                <Text style={{ fontSize: 11.5, color: palette.sub, marginTop: 2, lineHeight: 18 }}>
+                  这个月的预算花掉了多少。
+                  {totalBudget > 0
+                    ? `当前 ¥${fmtMoney(sums.expense)} / ¥${fmtMoney(totalBudget)}（${Math.round(outerPct * 100)}%）`
+                    : `没设预算时按收入算：¥${fmtMoney(sums.expense)} / ¥${fmtMoney(sums.income)}（${Math.round(outerPct * 100)}%）`}
+                </Text>
+              </View>
+            </View>
+            <View style={st.ringLegendRow}>
+              <View style={[st.ringLegendDot, { backgroundColor: '#A3FF2E' }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: palette.text }}>中环 · 时间进度</Text>
+                <Text style={{ fontSize: 11.5, color: palette.sub, marginTop: 2, lineHeight: 18 }}>
+                  这个月过去了多少。{monthLabel(month)}已过 {elapsed}/{days} 天（{days > 0 ? Math.round((elapsed / days) * 100) : 0}%）
+                </Text>
+              </View>
+            </View>
+            <View style={st.ringLegendRow}>
+              <View style={[st.ringLegendDot, { backgroundColor: '#0A84FF' }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: palette.text }}>内环 · 存下的钱</Text>
+                <Text style={{ fontSize: 11.5, color: palette.sub, marginTop: 2, lineHeight: 18 }}>
+                  {sums.income > 0
+                    ? `赚的钱里存下了多少：结余 ¥${fmtMoney(Math.max(balance, 0))} ÷ 收入 ¥${fmtMoney(sums.income)}，当前存下 ${Math.round((Math.max(balance, 0) / sums.income) * 100)}%。`
+                    : '本月暂无收入，记一笔收入后这里显示存下多少。'}
+                </Text>
+              </View>
+            </View>
+            <View style={[st.ringTip, { backgroundColor: palette.primarySoft }]}>
+              <Text style={{ fontSize: 11.5, color: palette.text, lineHeight: 19 }}>
+                💡 红环追上绿环 = 花钱速度超过预算节奏，该收敛啦；蓝环越满，这个月存下越多。
+              </Text>
+            </View>
+            <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 12 }} onPress={() => setRingHelp(false)}>
+              <Text style={{ fontSize: 13.5, fontWeight: '700', color: palette.primary }}>知道了</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
+
       {/* 记一笔按钮：明细页底部的独立大按钮 */}
       <View style={[st.addWrap, { bottom: 10 }]} pointerEvents="box-none">
         <TouchableOpacity onPress={onAdd} activeOpacity={0.85}>
@@ -289,6 +342,9 @@ const st = StyleSheet.create({
   hhBig: { fontSize: 42, fontWeight: '800', letterSpacing: -0.8, marginTop: 2, fontVariant: ['tabular-nums'] },
   hhMeta: { fontSize: 12, marginTop: 6, paddingBottom: 12 },
   ringsCard: { marginHorizontal: 20, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 16, padding: 12 },
+  ringLegendRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  ringLegendDot: { width: 14, height: 14, borderRadius: 7, marginTop: 2 },
+  ringTip: { borderRadius: 12, padding: 11, marginTop: 2 },
   ringTxt: { fontSize: 12, lineHeight: 21, flex: 1 },
   secLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 22, paddingTop: 18, paddingBottom: 4 },
   list: { paddingHorizontal: 22 },
