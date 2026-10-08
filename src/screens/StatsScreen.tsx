@@ -10,6 +10,14 @@ import type { TxType } from '../types';
 
 const SLICE_COLORS = ['#FFD60A', '#FF375F', '#0A84FF', '#BF5AF2', '#30D158', '#48484E'];
 
+/** 整数金额省略小数（¥2,000），有小数才显示两位（¥25.30）——统计页大数字更紧凑，配合自适应缩号保证永不换行 */
+function fmtMoneyShort(n: number): string {
+  return Number.isInteger(n) ? n.toLocaleString('zh-CN') : fmtMoney(n);
+}
+
+/** 汇总卡大金额通用属性：单行 + 超宽自动缩号（用户系统字体放大/窄屏时也不换行） */
+const bigMoneyProps = { numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.6 } as const;
+
 export function StatsScreen() {
   const { palette, revision } = useApp();
   const today = todayStr();
@@ -81,22 +89,22 @@ export function StatsScreen() {
           <View style={st.sumGrid}>
             <View style={[st.sg, st.sgTL]}>
               <Text style={{ fontSize: 12, color: palette.sub, fontWeight: '600' }}>支出</Text>
-              <Text style={{ fontSize: 26, fontWeight: '800', color: palette.danger, marginTop: 3, fontVariant: ['tabular-nums'] }}>¥{fmtMoney(sums.expense)}</Text>
+              <Text style={{ fontSize: 26, fontWeight: '800', color: palette.danger, marginTop: 3, fontVariant: ['tabular-nums'] }} {...bigMoneyProps}>¥{fmtMoneyShort(sums.expense)}</Text>
               <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>{changePct !== null ? `环比上月 ${changePct >= 0 ? '+' : ''}${changePct}%` : ' '}</Text>
             </View>
             <View style={[st.sg, st.sgTR]}>
               <Text style={{ fontSize: 12, color: palette.sub, fontWeight: '600' }}>收入</Text>
-              <Text style={{ fontSize: 26, fontWeight: '800', color: palette.income, marginTop: 3, fontVariant: ['tabular-nums'] }}>¥{fmtMoney(sums.income)}</Text>
+              <Text style={{ fontSize: 26, fontWeight: '800', color: palette.income, marginTop: 3, fontVariant: ['tabular-nums'] }} {...bigMoneyProps}>¥{fmtMoneyShort(sums.income)}</Text>
               <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>本月到账</Text>
             </View>
             <View style={[st.sg, st.sgBL]}>
               <Text style={{ fontSize: 12, color: palette.sub, fontWeight: '600' }}>结余</Text>
-              <Text style={{ fontSize: 26, fontWeight: '800', color: balance >= 0 ? palette.income : palette.danger, marginTop: 3, fontVariant: ['tabular-nums'] }}>{balance >= 0 ? '+' : '-'}¥{fmtMoney(Math.abs(balance))}</Text>
+              <Text style={{ fontSize: 26, fontWeight: '800', color: balance >= 0 ? palette.income : palette.danger, marginTop: 3, fontVariant: ['tabular-nums'] }} {...bigMoneyProps}>{balance >= 0 ? '+' : '-'}¥{fmtMoneyShort(Math.abs(balance))}</Text>
               <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>{sums.income > 0 ? `储蓄率 ${Math.max(saveRate ?? 0, 0)}%` : ' '}</Text>
             </View>
             <View style={[st.sg, st.sgBR]}>
               <Text style={{ fontSize: 12, color: palette.sub, fontWeight: '600' }}>日均支出</Text>
-              <Text style={{ fontSize: 26, fontWeight: '800', color: palette.text, marginTop: 3, fontVariant: ['tabular-nums'] }}>¥{fmtMoney(dailyAvg)}</Text>
+              <Text style={{ fontSize: 26, fontWeight: '800', color: palette.text, marginTop: 3, fontVariant: ['tabular-nums'] }} {...bigMoneyProps}>¥{fmtMoneyShort(dailyAvg)}</Text>
               <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>按已过{elapsed}天</Text>
             </View>
           </View>
