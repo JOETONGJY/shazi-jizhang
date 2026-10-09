@@ -19,7 +19,7 @@ function splitMoney(n: number): { int: string; dec: string } {
 /** 整数部分属性：单行 + 超 6 位数时轻微缩号兜底 */
 const bigIntProps = { numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75 } as const;
 
-export function StatsScreen() {
+export function StatsScreen({ onEditTx }: { onEditTx: (id: number) => void }) {
   const { palette, revision } = useApp();
   const today = todayStr();
   const curMonth = today.slice(0, 7);
@@ -74,6 +74,15 @@ export function StatsScreen() {
     if (next > curMonth) return;
     setMonth(next);
   };
+
+  // 日历点击某天 → 当日明细弹层（账单可点击进入编辑器）
+  const [daySheet, setDaySheet] = useState<number | null>(null);
+  const dayTxs = useMemo(
+    () => (daySheet === null ? [] : txs.filter((t) => Number(t.date.slice(8)) === daySheet)),
+    [daySheet, txs],
+  );
+  const dayExpense = dayTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const dayIncome = dayTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.bg }}>
@@ -195,8 +204,40 @@ export function StatsScreen() {
             <Text style={{ fontSize: 14, fontWeight: '700', color: palette.text }}>日历 · 每日支出</Text>
             <Text style={{ fontSize: 11, color: palette.faint }}>颜色越深花得越多</Text>
           </View>
-          <CalendarHeat cells={calendarGrid(month)} values={calendarValues} today={today} month={month} />        </View>
+          <CalendarHeat cells={calendarGrid(month)} values={calendarValues} today={today} month={month}
+            activeDays={new Set(txs.map((t) => Number(t.date.slice(8))))}
+            onDayPress={(d) => setDaySheet(d)} />        </View>
       </ScrollView>
+
+      {/* 当日明细弹层：点日历日期打开，点账单可进入编辑 */}
+      {daySheet !== null && (
+        <TouchableOpacity style={st.backdrop} activeOpacity={1} onPress={() => setDaySheet(null)}>
+          <View style={[st.sheet, { backgroundColor: palette.card }]}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: palette.text }}>{monthLabel(month)}{daySheet}日</Text>
+            <Text style={{ fontSize: 11.5, color: palette.sub, marginTop: 3 }}>
+              支出 ¥{fmtMoney(dayExpense)} · 收入 ¥{fmtMoney(dayIncome)} · 共 {dayTxs.length} 笔
+            </Text>
+            <ScrollView style={{ maxHeight: 340, marginTop: 8 }}>
+              {dayTxs.map((t) => (
+                <TouchableOpacity key={t.id} style={st.dayRow} activeOpacity={0.6} onPress={() => { setDaySheet(null); onEditTx(t.id); }}>
+                  <Text style={{ fontSize: 19 }}>{t.categoryIcon}</Text>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={{ fontSize: 13, color: palette.text }} numberOfLines={1}>{t.categoryName}{t.note ? ` · ${t.note}` : ''}</Text>
+                    <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>{t.accountName}</Text>
+                  </View>
+                  <Text style={{ fontSize: 14, fontWeight: '700', color: t.type === 'expense' ? palette.danger : palette.income }}>{t.type === 'expense' ? '-' : '+'}¥{fmtMoney(t.amount)}</Text>
+                </TouchableOpacity>
+              ))}
+              {dayTxs.length === 0 && (
+                <Text style={{ fontSize: 12, color: palette.faint, textAlign: 'center', paddingVertical: 18 }}>当天没有账单</Text>
+              )}
+            </ScrollView>
+            <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 12 }} onPress={() => setDaySheet(null)}>
+              <Text style={{ fontSize: 13.5, fontWeight: '700', color: palette.primary }}>关闭</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -230,4 +271,7 @@ const st = StyleSheet.create({
   rkVal: { width: 58, textAlign: 'right', fontSize: 12, fontWeight: '600' },
   rkPct: { width: 30, textAlign: 'right', fontSize: 10.5 },
   empty: { alignItems: 'center', marginTop: 60 },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5,10,25,0.55)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 18, paddingBottom: 30 },
+  dayRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(128,140,160,0.15)' },
 });

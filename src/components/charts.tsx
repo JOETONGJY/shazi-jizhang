@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import type { MonthPoint } from '../logic/stats';
 import { monthLabel } from '../logic/dates';
 import { fmtMoney } from '../logic/stats';
@@ -43,13 +43,16 @@ function Bar({ value, max, color, highlight, ring }: {
   );
 }
 
-/** 日历热力图 */
-export function CalendarHeat({ cells, values, today, month }: {
+/** 日历热力图（有账单的日期可点击，右上角带小圆点提示） */
+export function CalendarHeat({ cells, values, today, month, onDayPress, activeDays }: {
   cells: (number | null)[];
   /** day -> expense */
   values: Map<number, number>;
   today: string;
   month: string;
+  onDayPress?: (day: number) => void;
+  /** 有账单（含收入）的日期集合，决定可点击与圆点提示 */
+  activeDays?: Set<number>;
 }) {
   const { palette } = useApp();
   const max = Math.max(...[...values.values()], 1);
@@ -59,17 +62,25 @@ export function CalendarHeat({ cells, values, today, month }: {
         <Text key={w} style={[st.wd, { color: palette.faint }]}>{w}</Text>
       ))}
       {cells.map((d, i) => {
-        if (d === null) return <View key={`b${i}`} style={st.cell} />;
+        if (d === null) return <View key={`b${i}`} style={st.cellWrap} />;
         const v = values.get(d) ?? 0;
         const alpha = v > 0 ? 0.15 + (v / max) * 0.75 : 0;
         const isToday = `${month}-${String(d).padStart(2, '0')}` === today;
-        return (
-          <View key={d} style={[st.cell, {
+        const hasTx = activeDays ? activeDays.has(d) : v > 0;
+        const tappable = hasTx && onDayPress !== undefined;
+        const content = (
+          <View style={[st.cell, {
             backgroundColor: v > 0 ? `rgba(0,181,120,${alpha.toFixed(2)})` : palette.keyFnBg,
             ...(isToday ? { borderWidth: 2, borderColor: '#00B578' } : null),
           }]}>
             <Text style={[st.cellText, { color: isToday ? '#00A76F' : palette.faint }]}>{d}</Text>
+            {hasTx && <View style={[st.cellDot, { backgroundColor: palette.primary }]} />}
           </View>
+        );
+        return tappable ? (
+          <TouchableOpacity key={d} style={st.cellWrap} activeOpacity={0.6} onPress={() => onDayPress(d)}>{content}</TouchableOpacity>
+        ) : (
+          <View key={d} style={st.cellWrap}>{content}</View>
         );
       })}
     </View>
@@ -84,11 +95,13 @@ const st = StyleSheet.create({
   xlab: { flex: 1, textAlign: 'center', fontSize: 9.5 },
   cal: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
   wd: { width: '13.4%' as unknown as number, textAlign: 'center', fontSize: 9.5, marginBottom: 2 },
+  cellWrap: { width: '13.4%' as unknown as number },
   cell: {
-    width: '13.4%' as unknown as number, aspectRatio: 1.15, borderRadius: 6,
+    width: '100%', aspectRatio: 1.15, borderRadius: 6,
     alignItems: 'flex-start', justifyContent: 'flex-start', padding: 3,
   },
   cellText: { fontSize: 9 },
+  cellDot: { position: 'absolute', top: 3, right: 3, width: 4, height: 4, borderRadius: 2 },
 });
 
 export { fmtMoney };

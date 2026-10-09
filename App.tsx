@@ -157,7 +157,7 @@ function Shell() {
       <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />
       <View style={{ flex: 1 }}>
         {tab === 'home' && <HomeScreen onEdit={(id) => setOverlay({ kind: 'edit', id })} onAdd={() => setOverlay({ kind: 'record' })} />}
-        {tab === 'stats' && <StatsScreen />}
+        {tab === 'stats' && <StatsScreen onEditTx={(id) => setOverlay({ kind: 'edit', id })} />}
         {tab === 'mine' && <MineScreen onOpen={(p) => setOverlay({ kind: p })} onCheckUpdate={() => doCheckUpdate(true)} />}
       </View>
       {overlay === null && (
