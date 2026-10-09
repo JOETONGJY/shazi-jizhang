@@ -307,21 +307,23 @@ export function HomeScreen({ onEdit, onAdd }: { onEdit: (id: number) => void; on
         </TouchableOpacity>
       )}
 
-      {/* 记一笔按钮：明细页底部的独立大按钮 */}
-      <View style={[st.addWrap, { bottom: 10 }]} pointerEvents="box-none">
-        <TouchableOpacity onPress={onAdd} activeOpacity={0.85}>
-          <LinearGradient
-            colors={[palette.gradFrom, palette.gradTo]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0.9, y: 1 }}
-            style={[st.addBtn, { shadowColor: palette.primary }]}
-          >
-            <View style={st.addGloss} />
-            <Text style={[st.addIcon, { color: palette.onAccent }]}>＋</Text>
-            <Text style={[st.addTxt, { color: palette.onAccent }]}>记一笔</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+      {/* 记一笔按钮：明细页底部的独立大按钮（筛选/说明弹层打开时让位隐藏，避免遮挡弹层内容） */}
+      {filterSheet === null && !ringHelp && (
+        <View style={[st.addWrap, { bottom: 10 }]} pointerEvents="box-none">
+          <TouchableOpacity onPress={onAdd} activeOpacity={0.85}>
+            <LinearGradient
+              colors={[palette.gradFrom, palette.gradTo]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={[st.addBtn, { shadowColor: palette.primary }]}
+            >
+              <View style={st.addGloss} />
+              <Text style={[st.addIcon, { color: palette.onAccent }]}>＋</Text>
+              <Text style={[st.addTxt, { color: palette.onAccent }]}>记一笔</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
