@@ -19,7 +19,7 @@ function splitMoney(n: number): { int: string; dec: string } {
 /** 整数部分属性：单行 + 超 6 位数时轻微缩号兜底 */
 const bigIntProps = { numberOfLines: 1, adjustsFontSizeToFit: true, minimumFontScale: 0.75 } as const;
 
-export function StatsScreen({ onEditTx }: { onEditTx: (id: number) => void }) {
+export function StatsScreen() {
   const { palette, revision } = useApp();
   const today = todayStr();
   const curMonth = today.slice(0, 7);
@@ -219,14 +219,14 @@ export function StatsScreen({ onEditTx }: { onEditTx: (id: number) => void }) {
             </Text>
             <ScrollView style={{ maxHeight: 340, marginTop: 8 }}>
               {dayTxs.map((t) => (
-                <TouchableOpacity key={t.id} style={st.dayRow} activeOpacity={0.6} onPress={() => { setDaySheet(null); onEditTx(t.id); }}>
+                <View key={t.id} style={st.dayRow}>
                   <Text style={{ fontSize: 19 }}>{t.categoryIcon}</Text>
                   <View style={{ flex: 1, marginLeft: 10 }}>
                     <Text style={{ fontSize: 13, color: palette.text }} numberOfLines={1}>{t.categoryName}{t.note ? ` · ${t.note}` : ''}</Text>
                     <Text style={{ fontSize: 10.5, color: palette.faint, marginTop: 2 }}>{t.accountName}</Text>
                   </View>
                   <Text style={{ fontSize: 14, fontWeight: '700', color: t.type === 'expense' ? palette.danger : palette.income }}>{t.type === 'expense' ? '-' : '+'}¥{fmtMoney(t.amount)}</Text>
-                </TouchableOpacity>
+                </View>
               ))}
               {dayTxs.length === 0 && (
                 <Text style={{ fontSize: 12, color: palette.faint, textAlign: 'center', paddingVertical: 18 }}>当天没有账单</Text>
