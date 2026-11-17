@@ -1,15 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useApp } from '../state/AppStore';
-import { addCategory, deleteCategory, listCategories } from '../db/repo';
+import { addCategory, deleteCategory, listCategories, updateCategory } from '../db/repo';
 import { IconBubble, SheetModal } from '../components/ui';
 import type { Category } from '../types';
 
 const EMOJIS = ['🍚', '🚕', '🛍️', '💊', '🎮', '🧩', '🏠', '📱', '🎁', '🛡️', '📚', '🐾', '✈️', '📷', '🏋️', '🎧', '🧴', '🎬'];
 
+type SheetState =
+  | null
+  | { mode: 'add'; type: 'expense' | 'income'; parentId: number | null }
+  | { mode: 'edit'; cat: Category };
+
 export function CategoryManage({ onClose }: { onClose: () => void }) {
   const { palette, revision, bump } = useApp();
-  const [sheet, setSheet] = useState<null | { type: 'expense' | 'income'; parentId: number | null }>(null);
+  const [sheet, setSheet] = useState<SheetState>(null);
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('🏷️');
 
@@ -21,9 +26,9 @@ export function CategoryManage({ onClose }: { onClose: () => void }) {
 
   function add() {
     const n = name.trim();
-    if (!n) return;
+    if (!n || sheet?.mode !== 'add') return;
     try {
-      addCategory(n, icon, sheet!.type, sheet!.parentId);
+      addCategory(n, icon, sheet.type, sheet.parentId);
       bump();
       setSheet(null);
       setName('');
@@ -32,27 +37,47 @@ export function CategoryManage({ onClose }: { onClose: () => void }) {
     }
   }
 
+  function saveEdit() {
+    const n = name.trim();
+    if (!n || sheet?.mode !== 'edit') return;
+    const r = updateCategory(sheet.cat.id, n, icon);
+    if (!r.ok) { Alert.alert('无法修改', r.msg ?? ''); return; }
+    bump();
+    setSheet(null);
+    setName('');
+  }
+
   function del(c: Category) {
     const r = deleteCategory(c.id);
     if (!r.ok) Alert.alert('无法删除', r.msg ?? '');
     else bump();
   }
 
-  const CatRow = ({ c }: { c: Category }) => (
-    <View style={[st.row, { borderBottomColor: palette.border }]}>
-      <IconBubble icon={c.icon} size={32} fontSize={16} />
-      <Text style={{ flex: 1, fontSize: 13.5, color: palette.text, marginLeft: 10 }}>{c.name}</Text>
-      {!c.isCustom && <Text style={{ fontSize: 10, color: palette.faint, marginRight: 6 }}>内置</Text>}
-      {c.isCustom && (
-        <TouchableOpacity onPress={() => del(c)} hitSlop={8}>
-          <Text style={{ color: palette.danger, fontSize: 12 }}>删除</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-  );
+  const CatRow = ({ c }: { c: Category }) => {
+    const body = (
+      <>
+        <IconBubble icon={c.icon} size={32} fontSize={16} />
+        <Text style={{ flex: 1, fontSize: 13.5, color: palette.text, marginLeft: 10 }}>{c.name}</Text>
+        {!c.isCustom && <Text style={{ fontSize: 10, color: palette.faint, marginRight: 6 }}>内置</Text>}
+        {c.isCustom && (
+          <TouchableOpacity onPress={() => del(c)} hitSlop={8}>
+            <Text style={{ color: palette.danger, fontSize: 12 }}>删除</Text>
+          </TouchableOpacity>
+        )}
+      </>
+    );
+    // 自定义分类：点整行打开改名弹层（内置分类不可改）
+    return c.isCustom ? (
+      <TouchableOpacity style={[st.row, { borderBottomColor: palette.border }]} activeOpacity={0.6} onPress={() => { setName(c.name); setIcon(c.icon); setSheet({ mode: 'edit', cat: c }); }}>
+        {body}
+      </TouchableOpacity>
+    ) : (
+      <View style={[st.row, { borderBottomColor: palette.border }]}>{body}</View>
+    );
+  };
 
   const AddRow = ({ label, type, parentId }: { label: string; type: 'expense' | 'income'; parentId: number | null }) => (
-    <TouchableOpacity style={[st.row, { borderBottomWidth: 0 }]} onPress={() => { setName(''); setIcon('🏷️'); setSheet({ type, parentId }); }}>
+    <TouchableOpacity style={[st.row, { borderBottomWidth: 0 }]} onPress={() => { setName(''); setIcon('🏷️'); setSheet({ mode: 'add', type, parentId }); }}>
       <View style={[st.addRow, { borderColor: palette.primary }]}><Text style={{ color: palette.primary, fontWeight: '700', fontSize: 12.5 }}>＋ {label}</Text></View>
     </TouchableOpacity>
   );
@@ -84,7 +109,7 @@ export function CategoryManage({ onClose }: { onClose: () => void }) {
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      <SheetModal visible={sheet !== null} onClose={() => setSheet(null)} title="新增分类">
+      <SheetModal visible={sheet !== null} onClose={() => setSheet(null)} title={sheet?.mode === 'edit' ? '修改分类' : '新增分类'}>
         <TextInput
           value={name}
           onChangeText={setName}
@@ -101,8 +126,8 @@ export function CategoryManage({ onClose }: { onClose: () => void }) {
             </TouchableOpacity>
           ))}
         </View>
-        <TouchableOpacity style={[st.primaryBtn, { backgroundColor: palette.primary }]} onPress={add}>
-          <Text style={{ color: '#fff', fontWeight: '700' }}>确定添加</Text>
+        <TouchableOpacity style={[st.primaryBtn, { backgroundColor: palette.primary }]} onPress={sheet?.mode === 'edit' ? saveEdit : add}>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>{sheet?.mode === 'edit' ? '保存修改' : '确定添加'}</Text>
         </TouchableOpacity>
       </SheetModal>
     </View>

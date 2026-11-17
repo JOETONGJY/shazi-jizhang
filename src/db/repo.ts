@@ -53,6 +53,17 @@ export function deleteCategory(id: number): { ok: boolean; msg?: string } {
   return { ok: true };
 }
 
+/** 重命名/换图标自定义分类（内置分类不允许） */
+export function updateCategory(id: number, name: string, icon: string): { ok: boolean; msg?: string } {
+  const cat = listCategories().find((c) => c.id === id);
+  if (!cat) return { ok: false, msg: '分类不存在' };
+  if (!cat.isCustom) return { ok: false, msg: '内置分类不能修改' };
+  const n = name.trim();
+  if (!n) return { ok: false, msg: '名称不能为空' };
+  getDb().runSync('UPDATE categories SET name = ?, icon = ? WHERE id = ?', n, icon, id);
+  return { ok: true };
+}
+
 /* ---------------- 账户 ---------------- */
 
 function rowToAccount(r: any): Account {
@@ -141,6 +152,12 @@ export function listTxByMonth(month: string, categoryIds?: number[], accountId?:
 
 export function listTxAll(): TxWithNames[] {
   return getDb().getAllSync<TxWithNames>(`${TX_SELECT} ORDER BY t.date DESC, t.id DESC`);
+}
+
+/** 有账单记录的月份集合（yyyy-MM，降序）——月份选择器用 */
+export function listRecordMonths(): string[] {
+  const rows = getDb().getAllSync<{ ym: string }>('SELECT DISTINCT substr(date, 1, 7) AS ym FROM transactions ORDER BY ym DESC');
+  return rows.map((r) => r.ym);
 }
 
 /** 筛选分类时，把该分类及其子分类一起纳入 */

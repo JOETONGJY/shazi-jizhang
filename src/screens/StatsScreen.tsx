@@ -63,10 +63,16 @@ export function StatsScreen() {
   const maxTotal = all[0]?.total ?? 1;
 
   const top5 = all.slice(0, 5);
-  const restTotal = all.slice(5).reduce((s, x) => s + x.total, 0);
+  const rest = all.slice(5);
+  const restTotal = rest.reduce((s, x) => s + x.total, 0);
   const slices = [
     ...top5.map((s, i) => ({ value: s.total, color: SLICE_COLORS[i], label: s.name })),
-    ...(restTotal > 0 ? [{ value: restTotal, color: SLICE_COLORS[5], label: '其他' }] : []),
+    // 第 6 名之后：只有 1 个分类时直接显示它的名字，多个则合并为「其余」——避免与真实分类「其他」重名撞车
+    ...(rest.length === 1
+      ? [{ value: rest[0].total, color: SLICE_COLORS[5], label: rest[0].name }]
+      : restTotal > 0
+        ? [{ value: restTotal, color: SLICE_COLORS[5], label: '其余' }]
+        : []),
   ];
 
   const changeMonth = (d: number) => {
@@ -170,8 +176,8 @@ export function StatsScreen() {
                   centerValueColor={palette.text}
                 />
                 <View style={{ gap: 8 }}>
-                  {slices.map((s) => (
-                    <View key={s.label} style={st.legendRow}>
+                  {slices.map((s, i) => (
+                    <View key={`${s.label}-${i}`} style={st.legendRow}>
                       <View style={[st.dot, { backgroundColor: s.color }]} />
                       <Text style={{ fontSize: 12.5, color: palette.text }}>{s.label}</Text>
                     </View>

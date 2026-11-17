@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BackHandler, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useApp } from '../state/AppStore';
-import { listTxByMonth, categoryFilterIds, topCategories, listAccounts, listTxAll, countTx, getTotalBudget, monthSums } from '../db/repo';
+import { listTxByMonth, categoryFilterIds, topCategories, listAccounts, listTxAll, countTx, getTotalBudget, monthSums, listRecordMonths } from '../db/repo';
 import { fmtMoney, round2, computeStreak, monthTotals } from '../logic/stats';
 import { addMonths, dayLabel, monthLabel, monthRange, todayStr } from '../logic/dates';
 import { ActivityRings } from '../components/ActivityRings';
@@ -18,6 +18,14 @@ export function HomeScreen({ onEdit, onAdd }: { onEdit: (id: number) => void; on
   const [filterSheet, setFilterSheet] = useState<null | 'cat' | 'acc' | 'mon'>(null);
   // 圆环说明弹层：轻点圆环触发
   const [ringHelp, setRingHelp] = useState(false);
+  // 月份选择弹层：年份切换 + 12 宫格（有记录的月份才可选，未来月份不可选）
+  const [pickYear, setPickYear] = useState<string | null>(null); // null=跟随当前选中月份的年份
+
+  const recordMonths = useMemo(() => listRecordMonths(), [revision]);
+  const pickYears = useMemo(
+    () => Array.from(new Set([...recordMonths.map((m) => m.slice(0, 4)), curMonth.slice(0, 4)])).sort((a, b) => b.localeCompare(a)),
+    [recordMonths],
+  );
 
   const txs = useMemo(
     () => listTxByMonth(
@@ -182,25 +190,43 @@ export function HomeScreen({ onEdit, onAdd }: { onEdit: (id: number) => void; on
         )}
       </ScrollView>
 
-      {/* 月份选择弹层 */}
-      {filterSheet === 'mon' && (
-        <TouchableOpacity style={st.backdrop} activeOpacity={1} onPress={() => setFilterSheet(null)}>
-          <View style={[st.sheet, { backgroundColor: palette.card }]}>
-            {[-2, -1, 0].map((d) => {
-              const dt = new Date();
-              dt.setDate(1);
-              dt.setMonth(dt.getMonth() + d);
-              const m = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-              if (m > curMonth) return null;
-              return (
-                <TouchableOpacity key={m} style={[st.monPick, month === m && { backgroundColor: palette.primarySoft }]} onPress={() => { setMonth(m); setFilterSheet(null); }}>
-                  <Text style={{ color: month === m ? palette.primary : palette.text, fontWeight: month === m ? '700' : '400' }}>{monthLabel(m)}</Text>
+      {/* 月份选择弹层：年→月两级（有记录的月份可选，当前月永远可选，其余置灰） */}
+      {filterSheet === 'mon' && (() => {
+        const shownYear = pickYear ?? curMonth.slice(0, 4);
+        const yearIdx = pickYears.indexOf(shownYear);
+        return (
+          <TouchableOpacity style={st.backdrop} activeOpacity={1} onPress={() => setFilterSheet(null)}>
+            <View style={[st.sheet, { backgroundColor: palette.card }]}>
+              <View style={st.monYearRow}>
+                <TouchableOpacity hitSlop={10} disabled={yearIdx >= pickYears.length - 1} onPress={() => setPickYear(pickYears[yearIdx + 1])}>
+                  <Text style={{ color: yearIdx >= pickYears.length - 1 ? palette.border : palette.sub, fontSize: 15 }}>‹</Text>
                 </TouchableOpacity>
-              );
-            })}
-          </View>
-        </TouchableOpacity>
-      )}
+                <Text style={{ fontSize: 14, fontWeight: '700', color: palette.text, minWidth: 76, textAlign: 'center' }}>{shownYear}年</Text>
+                <TouchableOpacity hitSlop={10} disabled={yearIdx <= 0} onPress={() => setPickYear(pickYears[yearIdx - 1])}>
+                  <Text style={{ color: yearIdx <= 0 ? palette.border : palette.sub, fontSize: 15 }}>›</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={st.monGrid}>
+                {Array.from({ length: 12 }, (_, i) => {
+                  const m = `${shownYear}-${String(i + 1).padStart(2, '0')}`;
+                  const selectable = recordMonths.includes(m) || m === curMonth;
+                  const selected = month === m;
+                  return (
+                    <TouchableOpacity
+                      key={m}
+                      disabled={!selectable}
+                      style={[st.monCell, selectable && { backgroundColor: palette.primarySoft }, selected && { borderWidth: 2, borderColor: palette.primary }]}
+                      onPress={() => { setMonth(m); setFilterSheet(null); }}
+                    >
+                      <Text style={{ fontSize: 12.5, color: !selectable ? palette.faint : selected ? palette.primary : palette.text, fontWeight: selected ? '700' : '400', opacity: selectable ? 1 : 0.4 }}>{i + 1}月</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+      })()}
 
       {/* 分类筛选弹层 */}
       {filterSheet === 'cat' && (
@@ -357,6 +383,9 @@ const st = StyleSheet.create({
   backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(5,10,25,0.55)', justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: 18, paddingBottom: 30 },
   monPick: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 10 },
+  monYearRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22, marginBottom: 12 },
+  monGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  monCell: { width: '23%' as unknown as number, alignItems: 'center', paddingVertical: 12, borderRadius: 10 },
   filterGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   filterCell: { width: '22%', alignItems: 'center', gap: 4, paddingVertical: 10, borderRadius: 12, backgroundColor: 'rgba(128,140,160,0.10)' },
   accRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 8, borderRadius: 10 },
