@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as LegacyFS from 'expo-file-system/legacy';
 import Constants from 'expo-constants';
@@ -12,6 +12,11 @@ type Phase = 'idle' | 'downloading' | 'ready';
 
 const ANDROID_MANAGE_UNKNOWN_APPS = 'android.settings.MANAGE_UNKNOWN_APPS_SOURCES';
 const PACKAGE_NAME = Constants.expoConfig?.android?.package ?? '';
+
+/** 清理 GitHub Release 的 Markdown 标记：去标题井号、加粗星号，保留换行 */
+function cleanNotes(md: string): string {
+  return md.replace(/^#{1,6}\s+/gm, '').replace(/\*\*/g, '').trim();
+}
 
 /** 应用内更新弹窗：发现新版本 → 下载APK（直连失败自动切镜像，带进度）→ 拉起系统安装器 */
 export function UpdateModal({ info, localVersion, onClose }: { info: UpdateInfo; localVersion: string; onClose: () => void }) {
@@ -129,7 +134,9 @@ export function UpdateModal({ info, localVersion, onClose }: { info: UpdateInfo;
           </Text>
 
           <View style={[st.notesBox, { backgroundColor: palette.keyFnBg }]}>
-            <Text style={{ fontSize: 12, color: palette.text, lineHeight: 20 }}>{info.notes || '体验优化与问题修复'}</Text>
+            <ScrollView nestedScrollEnabled style={{ flexGrow: 0 }}>
+              <Text style={{ fontSize: 12, color: palette.text, lineHeight: 20 }}>{cleanNotes(info.notes) || '体验优化与问题修复'}</Text>
+            </ScrollView>
           </View>
 
           {phase === 'downloading' ? (
